@@ -1,0 +1,1080 @@
+const ComponentFunction = function() {
+  // @section:imports @depends:[]
+  const React = require('react');
+  const { useState, useEffect } = React;
+  const { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Platform, Alert, LayoutAnimation, useWindowDimensions } = require('react-native');
+  const { Ionicons } = require('@react-native-vector-icons/ionicons');
+  const { createBottomTabNavigator } = require('@react-navigation/bottom-tabs');
+  const { createStackNavigator } = require('@react-navigation/stack');
+  const { useSafeAreaInsets } = require('react-native-safe-area-context');
+  const { useQuery, useMutation, seedSampleRows } = require('platform-hooks');
+  const { useLocation } = require('platform-hooks');
+  // @end:imports
+
+  // @section:theme @depends:[]
+  var primaryColor = '#12263D';
+  var accentColor = '#16865D';
+  var backgroundColor = '#97CB76';
+  var cardColor = '#D0D3D6';
+  var textPrimary = '#24466A';
+  var textSecondary = '#1C4677';
+  var surfaceAltColor = '#C2C8CD';
+  var borderColor = '#B8BFC7';
+  var onAccentColor = '#FFFFFF';
+  var occupiedColor = '#DC5B62';
+  var unavailableColor = '#A8B2BE';var primaryColor = '#12263D';
+var accentColor = '#16865D';
+
+var backgroundColor = '#97CB76';
+var cardColor = '#D0D3D6';
+
+var textPrimary = '#24466A';
+var textSecondary = '#1C4677';
+
+var surfaceAltColor = '#C2C8CD';
+var borderColor = '#B8BFC7';
+
+var onAccentColor = '#FFFFFF';
+
+var occupiedColor = '#F05D68';
+var unavailableColor = '#A8B2BE';
+
+var radiusSm = 14;
+var radiusMd = 20;
+var radiusPill = 999;
+
+var visualDesign =
+  'Premium SmartPark dashboard with midnight navy and electric teal, modern graphical monitoring, live vehicle tracking and elegant cards.';
+  var radiusSm = 12;
+  var radiusMd = 18;
+  var radiusPill = 999;
+  var visualDesign = 'Premium navy and white parking operations dashboard with emerald accents, spacious cards, responsive layouts and clear data hierarchy.';
+  var TAB_MENU_HEIGHT = Platform.OS === 'web' ? 56 : 49;
+  var SCROLL_EXTRA_PADDING = 20;
+  var FAB_SPACING = 16;
+  // @end:theme
+
+  // @section:navigation-setup @depends:[]
+  var Tab = createBottomTabNavigator();
+  var Stack = createStackNavigator();
+  // @end:navigation-setup
+
+  // @section:ThemeContext @depends:[theme]
+  var ThemeContext = React.createContext(null);
+  var ThemeProvider = function(props) {
+    var darkState = useState(false);
+    return React.createElement(ThemeContext.Provider, {
+      value: {
+        theme: { colors: { primary: primaryColor, accent: accentColor, background: backgroundColor, card: cardColor, textPrimary: textPrimary, textSecondary: textSecondary } },
+        darkMode: darkState[0],
+        toggleDarkMode: function() { darkState[1](function(v) { return !v; }); },
+        visualDesign: visualDesign
+      }
+    }, props.children);
+  };
+  var useTheme = function() { return React.useContext(ThemeContext); };
+  // @end:ThemeContext
+
+  // @section:sample-data @depends:[]
+  var SAMPLE_ROWS = {
+    parking_spaces: ['A', 'B', 'C', 'D'].reduce(function(all, letter) {
+      for (var n = 1; n <= 6; n++) {
+        var label = letter + n;
+        var occupied = ['A1', 'A2', 'A4', 'B1', 'B3', 'B4', 'B5', 'C1', 'C2', 'C3', 'C4', 'C5', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6'].indexOf(label) >= 0;
+        all.push({ space_label: label, space_status: label === 'A6' ? 'unavailable' : occupied ? 'occupied' : 'available' });
+      }
+      return all;
+    }, []),
+    vehicle_movements: [
+      { registration_number: 'KJH 482', entry_at: '@day(0 10:42)', parking_status: 'inside', parking_space_id: 'sample-parking_spaces-1' },
+      { registration_number: 'MTR 901', entry_at: '@day(0 08:12)', exit_at: '@day(0 10:36)', duration_minutes: 144, parking_status: 'exited', parking_space_id: 'sample-parking_spaces-3' },
+      { registration_number: 'JXQ 2718', entry_at: '@day(0 10:21)', parking_status: 'inside', parking_space_id: 'sample-parking_spaces-9' },
+      { registration_number: 'LNP 664', entry_at: '@day(0 08:28)', exit_at: '@day(0 10:08)', duration_minutes: 100, parking_status: 'exited', parking_space_id: null },
+      { registration_number: 'California 8VXR219', entry_at: '@day(0 09:54)', parking_status: 'inside', parking_space_id: 'sample-parking_spaces-10' },
+      { registration_number: 'WCD 308', entry_at: '@day(0 09:41)', parking_status: 'inside', parking_space_id: 'sample-parking_spaces-11' }
+    ]
+  };
+  // @end:sample-data
+
+  // @section:shared-helpers @depends:[theme]
+  var notify = function(title, message) {
+    Platform.OS === 'web' ? window.alert(message) : Alert.alert(title, message);
+  };
+  var timeOf = function(value) {
+    if (!value) return '—';
+    var date = new Date(value);
+    return isNaN(date.getTime()) ? '—' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  var dateOf = function(value) {
+    if (!value) return '—';
+    var date = new Date(value);
+    return isNaN(date.getTime()) ? '—' : date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+  var durationOf = function(minutes) {
+    var value = Math.max(0, Number(minutes) || 0);
+    return Math.floor(value / 60) + 'h ' + value % 60 + 'm';
+  };
+  var movementTime = function(row) { return row?.exit_at || row?.entry_at; };
+  var sortedMovements = function(rows) {
+    return rows.slice().sort(function(a, b) { return new Date(movementTime(b) || 0).getTime() - new Date(movementTime(a) || 0).getTime(); });
+  };
+  var icon = function(name, color, size, id) {
+    return React.createElement(Ionicons, { name: name, color: color || primaryColor, size: size || 24, componentId: id });
+  };
+  var header = function(title, actionIcon, onAction, id) {
+    return React.createElement(View, { style: styles.header, componentId: id + '-header' },
+      React.createElement(View, { style: styles.headerBrand, componentId: id + '-brand' },
+        React.createElement(View, { style: styles.headerBrandMark, componentId: id + '-brand-mark' }, icon('car-sport', onAccentColor, 18, id + '-brand-icon')),
+        React.createElement(Text, { style: styles.headerTitle, componentId: id + '-title' }, title)),
+      actionIcon ? React.createElement(TouchableOpacity, { style: styles.iconButton, activeOpacity: 0.7, onPress: onAction, componentId: id + '-action' },
+        icon(actionIcon, primaryColor, 23, id + '-action-icon')) : null
+    );
+  };
+  // @end:shared-helpers
+
+  // @section:MovementRow @depends:[styles,shared-helpers]
+  var MovementRow = function(props) {
+    var item = props.item || {};
+    return React.createElement(TouchableOpacity, {
+      style: styles.movementRow, activeOpacity: 0.7, onPress: props.onPress,
+      componentId: props.id + '-row'
+    },
+      React.createElement(View, { style: styles.movementIcon, componentId: props.id + '-icon-wrap' },
+        icon('car-sport-outline', primaryColor, 20, props.id + '-icon')),
+      React.createElement(View, { style: styles.movementCopy, componentId: props.id + '-copy' },
+        React.createElement(Text, { style: styles.plate, numberOfLines: 1, componentId: props.id + '-plate' }, item.registration_number || 'Unknown vehicle'),
+        React.createElement(Text, { style: styles.movementMeta, numberOfLines: 1, componentId: props.id + '-meta' },
+          props.meta || ((item.parking_status === 'exited' ? 'Exited' : 'Entered') + ' · North lot'))
+      ),
+      props.showStatus ? React.createElement(Text, { style: [styles.movementStatus, item.parking_status === 'exited' ? styles.exitedStatus : null], componentId: props.id + '-status' },
+        item.parking_status === 'exited' ? 'Exited' : 'Entered') : null,
+      React.createElement(Text, { style: styles.movementTime, componentId: props.id + '-time' }, timeOf(movementTime(item)))
+    );
+  };
+  // @end:MovementRow
+
+  // @section:SpaceCard @depends:[styles,shared-helpers]
+  var SpaceCard = function(props) {
+    var spaces = props.spaces || [];
+    var occupied = spaces.filter(function(s) { return s && s.space_status === 'occupied'; }).length;
+    var available = spaces.filter(function(s) { return s && s.space_status === 'available'; }).length;
+    var rows = [];
+    for (var i = 0; i < spaces.length; i += 6) rows.push(spaces.slice(i, i + 6));
+    return React.createElement(View, { style: styles.card, componentId: props.id + '-card' },
+      React.createElement(View, { style: styles.statusHeading, componentId: props.id + '-heading' },
+        React.createElement(View, { style: styles.statusCopy, componentId: props.id + '-copy' },
+          React.createElement(Text, { style: styles.overline, componentId: props.id + '-overline' }, 'NORTH LOT  /  PARKING MAP'),
+          React.createElement(View, { style: styles.occupancy, componentId: props.id + '-occupancy' },
+            React.createElement(Text, { style: styles.bigNumber, componentId: props.id + '-occupied' }, String(occupied)),
+            React.createElement(Text, { style: styles.subLabel, componentId: props.id + '-total' }, 'of ' + spaces.length + ' spaces used')
+          )
+        ),
+        React.createElement(View, { style: styles.openCount, componentId: props.id + '-available-wrap' },
+          React.createElement(Text, { style: styles.openNumber, componentId: props.id + '-available' }, String(available)),
+          React.createElement(Text, { style: styles.openLabel, componentId: props.id + '-available-label' }, 'AVAILABLE')
+        )
+      ),
+      spaces.length ? React.createElement(View, { style: styles.bayRows, componentId: props.id + '-grid' },
+        rows.map(function(row, rowIndex) {
+          return React.createElement(View, { key: 'r' + rowIndex, style: styles.bayRow, componentId: props.id + '-grid-row-' + rowIndex },
+            row.map(function(space, colIndex) {
+              var status = space?.space_status || 'available';
+              return React.createElement(TouchableOpacity, {
+                key: String(space?.id || colIndex), activeOpacity: 0.7,
+                style: [styles.bay, status === 'occupied' ? styles.bayOccupied : status === 'unavailable' ? styles.bayUnavailable : null],
+                onPress: function() { if (props.onSpace) props.onSpace(space); },
+                componentId: props.id + '-bay-' + rowIndex + '-' + colIndex
+              }, React.createElement(Text, {
+                style: [styles.bayText, status === 'occupied' ? styles.bayOccupiedText : null],
+                componentId: props.id + '-bay-label-' + rowIndex + '-' + colIndex
+              }, space?.space_label || '—'));
+            })
+          );
+        })
+      ) : React.createElement(Text, { style: styles.emptyLine, componentId: props.id + '-empty' }, 'No spaces configured yet.'),
+      React.createElement(View, { style: styles.legend, componentId: props.id + '-legend' },
+        [['Available', accentColor], ['Occupied', occupiedColor], ['Unavailable', unavailableColor]].map(function(entry, index) {
+          return React.createElement(View, { key: entry[0], style: styles.legendItem, componentId: props.id + '-legend-' + index },
+            React.createElement(View, { style: [styles.legendMark, { backgroundColor: entry[1] }], componentId: props.id + '-mark-' + index }),
+            React.createElement(Text, { style: styles.smallText, componentId: props.id + '-legend-text-' + index }, entry[0])
+          );
+        })
+      )
+    );
+  };
+  // @end:SpaceCard
+
+  // @section:DashboardStat @depends:[styles,shared-helpers]
+  var DashboardStat = function(props) {
+    return React.createElement(View, { style: [styles.statCard, { width: props.width }], componentId: 'dashboard-stat-' + props.id },
+      React.createElement(View, { style: [styles.statIcon, { backgroundColor: props.tint || surfaceAltColor }], componentId: 'dashboard-stat-icon-' + props.id },
+        icon(props.icon, props.color || accentColor, 22, 'dashboard-stat-glyph-' + props.id)),
+      React.createElement(Text, { style: styles.statValue, componentId: 'dashboard-stat-value-' + props.id }, String(props.value)),
+      React.createElement(Text, { style: styles.statLabel, componentId: 'dashboard-stat-label-' + props.id }, props.label)
+    );
+  };
+  // @end:DashboardStat
+
+  // @section:HomeScreen @depends:[ThemeContext,SpaceCard,MovementRow,DashboardStat,styles]
+  var HomeScreen = function(props) {
+    var insets = useSafeAreaInsets();
+    var dimensions = useWindowDimensions();
+    var windowHeight = dimensions.height;
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var spacesQuery = useQuery('parking_spaces');
+    var movementsQuery = useQuery('vehicle_movements');
+    var clockState = useState(new Date());
+    useEffect(function() {
+      var timer = setInterval(function() { clockState[1](new Date()); }, 60000);
+      return function() { clearInterval(timer); };
+    }, []);
+    var clock = clockState[0];
+    var recent = sortedMovements(movementsQuery.data).slice(0, 6);
+    var today = clock.toDateString();
+    var enteredToday = movementsQuery.data.filter(function(item) { return item?.entry_at && new Date(item.entry_at).toDateString() === today; }).length;
+    var exitedToday = movementsQuery.data.filter(function(item) { return item?.exit_at && new Date(item.exit_at).toDateString() === today; }).length;
+    var inside = movementsQuery.data.filter(function(item) { return item?.parking_status === 'inside'; }).length;
+    var available = spacesQuery.data.filter(function(item) { return item?.space_status === 'available'; }).length;
+    var capacity = spacesQuery.data.length;
+    var used = spacesQuery.data.filter(function(item) { return item?.space_status === 'occupied'; }).length;
+    var contentWidth = Math.min(dimensions.width >= 900 ? dimensions.width - 310 : dimensions.width - 32, 1180);
+    var columns = contentWidth >= 680 ? 3 : 2;
+    var statWidth = Math.max(130, (contentWidth - (columns - 1) * 12) / columns);
+    var openRecord = function() { props.navigation.getParent()?.navigate('RecordMovement'); };
+    return React.createElement(View, { style: styles.screen, componentId: 'home-screen' },
+      React.createElement(StatusBar, { backgroundColor: theme.colors.background, barStyle: 'dark-content', componentId: 'home-status-bar' }),
+      React.createElement(View, { style: { paddingTop: insets.top }, componentId: 'home-top' },
+        header('SmartPark', 'search-outline', function() { props.navigation.navigate('Movements'); }, 'home')),
+      React.createElement(ScrollView, {
+        style: { height: windowHeight - insets.top - insets.bottom - 56 },
+        contentContainerStyle: { paddingTop: 12, paddingHorizontal: 16, paddingBottom: TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING, alignItems: 'center' },
+        componentId: 'home-scroll'
+      },
+        React.createElement(View, { style: styles.content, componentId: 'home-dashboard-content' },
+          React.createElement(View, { style: styles.welcomeRow, componentId: 'home-welcome' },
+            React.createElement(View, { style: { flex: 1 }, componentId: 'home-welcome-copy' },
+              React.createElement(Text, { style: styles.pageTitle, componentId: 'home-welcome-title' }, 'Dashboard overview'),
+              React.createElement(Text, { style: styles.pageSubtitle, componentId: 'home-welcome-subtitle' }, 'Welcome back · North lot at a glance')),
+            React.createElement(View, { style: styles.dateChip, componentId: 'home-date-chip' },
+              icon('calendar-outline', primaryColor, 16, 'home-date-icon'),
+              React.createElement(Text, { style: styles.dateText, componentId: 'home-date-text' }, clock.toLocaleDateString([], { month: 'short', day: 'numeric' }) + '  ' + timeOf(clock)))
+          ),
+          React.createElement(View, { style: styles.dashboardToolbar, componentId: 'home-toolbar' },
+            React.createElement(TouchableOpacity, { style: styles.dashboardSearch, onPress: function() { props.navigation.navigate('Movements'); }, componentId: 'home-search' },
+              icon('search-outline', textSecondary, 19, 'home-search-icon'),
+              React.createElement(Text, { style: styles.smallText, componentId: 'home-search-label' }, 'Search vehicles')),
+            React.createElement(TouchableOpacity, { style: styles.toolbarIcon, onPress: function() { notify('Notifications', 'Notifications are not configured for this local dashboard.'); }, componentId: 'home-notifications' },
+              icon('notifications-outline', primaryColor, 21, 'home-notifications-icon')),
+            React.createElement(View, { style: styles.profileChip, componentId: 'home-profile' },
+              React.createElement(View, { style: styles.avatar, componentId: 'home-profile-avatar' }, React.createElement(Text, { style: styles.avatarText, componentId: 'home-profile-initial' }, 'A')),
+              React.createElement(Text, { style: styles.profileText, componentId: 'home-profile-label' }, 'Admin'))
+          ),
+          React.createElement(View, { style: styles.statsGrid, componentId: 'home-stats-grid' },
+            React.createElement(DashboardStat, { id: 'capacity', label: 'Total parking capacity', value: capacity, icon: 'layers-outline', width: statWidth }),
+            React.createElement(DashboardStat, { id: 'inside', label: 'Cars currently inside', value: inside, icon: 'car-sport-outline', width: statWidth, color: primaryColor, tint: '#EDF2F8' }),
+            React.createElement(DashboardStat, { id: 'available', label: 'Available spaces', value: available, icon: 'checkmark-circle-outline', width: statWidth }),
+            React.createElement(DashboardStat, { id: 'entered', label: 'Cars entered today', value: enteredToday, icon: 'enter-outline', width: statWidth }),
+            React.createElement(DashboardStat, { id: 'exited', label: 'Cars exited today', value: exitedToday, icon: 'exit-outline', width: statWidth, color: primaryColor, tint: '#EDF2F8' }),
+            React.createElement(DashboardStat, { id: 'occupancy', label: 'Parking occupancy', value: (capacity ? Math.round(used / capacity * 100) : 0) + '%', icon: 'pie-chart-outline', width: statWidth })
+          ),
+          spacesQuery.error ? React.createElement(View, { style: styles.emptyPanel, componentId: 'home-error' },
+            React.createElement(Text, { style: styles.sectionTitle, componentId: 'home-error-title' }, 'North lot status unavailable'),
+            React.createElement(Text, { style: styles.emptyCopy, componentId: 'home-error-copy' }, 'Parking spaces couldn’t be loaded from this device.'),
+            React.createElement(TouchableOpacity, { style: styles.primaryButton, activeOpacity: 0.7, onPress: spacesQuery.refetch, componentId: 'home-retry' },
+              React.createElement(Text, { style: styles.primaryButtonText, componentId: 'home-retry-text' }, 'Retry'))
+          ) : React.createElement(SpaceCard, { spaces: spacesQuery.data, id: 'home-spaces', onSpace: function() { props.navigation.navigate('Spaces'); } }),
+          React.createElement(View, { style: styles.sectionHeader, componentId: 'home-recent-heading' },
+            React.createElement(Text, { style: styles.sectionTitle, componentId: 'home-recent-title' }, 'Recent movements'),
+            React.createElement(TouchableOpacity, { style: styles.textAction, activeOpacity: 0.7, onPress: function() { props.navigation.navigate('Movements'); }, componentId: 'home-view-all' },
+              React.createElement(Text, { style: styles.actionText, componentId: 'home-view-all-text' }, 'View all  →'))
+          ),
+          recent.length ? React.createElement(View, { style: styles.listCard, componentId: 'home-movement-list' },
+            recent.map(function(item, index) {
+              return React.createElement(MovementRow, {
+                key: String(item.id || index), item: item, id: 'home-movement-' + index,
+                onPress: function() { props.navigation.getParent()?.navigate('MovementDetail', { movementId: item.id }); }
+              });
+            })
+          ) : React.createElement(View, { style: styles.emptyPanel, componentId: 'home-empty' },
+            React.createElement(Text, { style: styles.sectionTitle, componentId: 'home-empty-title' }, 'No movements recorded'),
+            React.createElement(Text, { style: styles.emptyCopy, componentId: 'home-empty-copy' }, 'Record an entry or exit to start the North lot log.'),
+            React.createElement(TouchableOpacity, { style: styles.primaryButton, activeOpacity: 0.7, onPress: openRecord, componentId: 'home-record' },
+              React.createElement(Text, { style: styles.primaryButtonText, componentId: 'home-record-text' }, 'Record vehicle movement'))
+          )
+        )
+      )
+    );
+  };
+  // @end:HomeScreen
+
+  // @section:MovementsScreen @depends:[ThemeContext,MovementRow,styles]
+  var MovementsScreen = function(props) {
+    var insets = useSafeAreaInsets();
+    var windowHeight = useWindowDimensions().height;
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var query = useQuery('vehicle_movements');
+    var searchState = useState('');
+    var search = searchState[0];
+    var setSearch = searchState[1];
+    var filterState = useState('All');
+    var filter = filterState[0];
+    var setFilter = filterState[1];
+    var sortState = useState(true);
+    var newestFirst = sortState[0];
+    var setNewestFirst = sortState[1];
+    var results = sortedMovements(query.data).filter(function(item) {
+      return String(item?.registration_number || '').toLowerCase().indexOf(search.trim().toLowerCase()) >= 0 &&
+        (filter === 'All' || item?.parking_status === (filter === 'Inside' ? 'inside' : 'exited'));
+    });
+    if (!newestFirst) results.reverse();
+    var openRecord = function() { props.navigation.getParent()?.navigate('RecordMovement'); };
+    return React.createElement(View, { style: styles.screen, componentId: 'movements-screen' },
+      React.createElement(StatusBar, { backgroundColor: theme.colors.background, barStyle: 'dark-content', componentId: 'movements-status-bar' }),
+      React.createElement(View, { style: { paddingTop: insets.top }, componentId: 'movements-top' }, header('Movements', 'add', openRecord, 'movements')),
+      React.createElement(ScrollView, {
+        style: { height: windowHeight - insets.top - insets.bottom - 56 },
+        contentContainerStyle: { paddingTop: 12, paddingHorizontal: 16, paddingBottom: TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING, alignItems: 'center' },
+        componentId: 'movements-scroll'
+      },
+        React.createElement(View, { style: styles.content, componentId: 'movements-content' },
+          React.createElement(Text, { style: styles.pageTitle, componentId: 'movements-page-title' }, 'Vehicle management'),
+          React.createElement(Text, { style: styles.pageSubtitle, componentId: 'movements-page-subtitle' }, 'Search registrations and review complete parking history.'),
+          React.createElement(View, { style: styles.search, componentId: 'movements-search-wrap' },
+            icon('search-outline', textSecondary, 20, 'movements-search-icon'),
+            React.createElement(TextInput, {
+              style: styles.searchInput, value: search, onChangeText: function(value) {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setSearch(value);
+              },
+              placeholder: 'Search registration number', placeholderTextColor: textSecondary,
+              autoCapitalize: 'characters', autoCorrect: false, keyboardType: 'default',
+              componentId: 'movements-search-input'
+            })
+          ),
+          React.createElement(View, { style: styles.filterRow, componentId: 'movements-filters' },
+            ['All', 'Inside', 'Exited'].map(function(option) {
+              return React.createElement(TouchableOpacity, { key: option, style: [styles.filterChip, filter === option ? styles.filterChipActive : null], onPress: function() { setFilter(option); }, componentId: 'movements-filter-' + option },
+                React.createElement(Text, { style: [styles.filterText, filter === option ? styles.filterTextActive : null], componentId: 'movements-filter-text-' + option }, option));
+            }),
+            React.createElement(TouchableOpacity, { style: styles.sortButton, onPress: function() { setNewestFirst(function(value) { return !value; }); }, componentId: 'movements-sort' },
+              icon('swap-vertical-outline', primaryColor, 17, 'movements-sort-icon'),
+              React.createElement(Text, { style: styles.actionText, componentId: 'movements-sort-text' }, newestFirst ? 'Newest' : 'Oldest'))
+          ),
+          React.createElement(View, { style: styles.sectionHeader, componentId: 'movements-list-heading' },
+            React.createElement(Text, { style: styles.sectionTitle, componentId: 'movements-list-title' }, search ? 'Search results' : 'Movements'),
+            React.createElement(Text, { style: styles.smallText, componentId: 'movements-count' }, results.length + ' movements')
+          ),
+          results.length ? React.createElement(View, { style: styles.listCard, componentId: 'movements-list' },
+            results.map(function(item, index) {
+              return React.createElement(MovementRow, {
+                key: String(item.id || index), item: item, showStatus: true, id: 'movements-item-' + index,
+                onPress: function() { props.navigation.getParent()?.navigate('MovementDetail', { movementId: item.id }); }
+              });
+            })
+          ) : React.createElement(View, { style: styles.emptyPanel, componentId: 'movements-empty' },
+            React.createElement(View, { style: styles.emptyMark, componentId: 'movements-empty-mark' }, icon('car-outline', primaryColor, 32, 'movements-empty-icon')),
+            React.createElement(Text, { style: styles.sectionTitle, componentId: 'movements-empty-title' }, search || filter !== 'All' ? 'No matching vehicles' : 'No vehicle movements'),
+            React.createElement(Text, { style: styles.emptyCopy, componentId: 'movements-empty-copy' },
+              search || filter !== 'All' ? 'Try another registration or filter.' : 'Record the first entry or exit at North lot to start your movement history.'),
+            !search && filter === 'All' ? React.createElement(TouchableOpacity, { style: styles.primaryButton, activeOpacity: 0.7, onPress: openRecord, componentId: 'movements-empty-action' },
+              React.createElement(Text, { style: styles.primaryButtonText, componentId: 'movements-empty-action-text' }, 'Record movement')) : null
+          )
+        )
+      )
+    );
+  };
+  // @end:MovementsScreen
+
+  // @section:SpacesScreen @depends:[ThemeContext,SpaceCard,MovementRow,styles]
+  var SpacesScreen = function(props) {
+    var insets = useSafeAreaInsets();
+    var windowHeight = useWindowDimensions().height;
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var spacesQuery = useQuery('parking_spaces');
+    var movementsQuery = useQuery('vehicle_movements');
+    var updateSpace = useMutation('parking_spaces', 'update');
+    var recent = sortedMovements(movementsQuery.data).filter(function(item) { return !!item?.parking_space_id; }).slice(0, 6);
+    var changeSpace = function(space) {
+      if (!space?.id) return;
+      var next = space.space_status === 'unavailable' ? 'available' : 'unavailable';
+      var action = function() {
+        updateSpace.mutate({ id: space.id, data: { space_status: next } }).then(
+          function() { spacesQuery.refetch(); },
+          function(error) { notify('Unable to update space', error.message); }
+        );
+      };
+      var message = 'Mark space ' + (space.space_label || '') + ' as ' + next + '?';
+      Platform.OS === 'web' ? (window.confirm(message) && action()) : Alert.alert('Change space status', message, [
+        { text: 'Cancel' }, { text: 'Confirm', onPress: action }
+      ]);
+    };
+    return React.createElement(View, { style: styles.screen, componentId: 'spaces-screen' },
+      React.createElement(StatusBar, { backgroundColor: theme.colors.background, barStyle: 'dark-content', componentId: 'spaces-status-bar' }),
+      React.createElement(View, { style: { paddingTop: insets.top }, componentId: 'spaces-top' }, header('Spaces', null, null, 'spaces')),
+      React.createElement(ScrollView, {
+        style: { height: windowHeight - insets.top - insets.bottom - 56 },
+        contentContainerStyle: { paddingTop: 12, paddingHorizontal: 16, paddingBottom: TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING, alignItems: 'center' },
+        componentId: 'spaces-scroll'
+      },
+        React.createElement(View, { style: styles.content, componentId: 'spaces-content' },
+          React.createElement(Text, { style: styles.pageTitle, componentId: 'spaces-page-title' }, 'Live parking monitoring'),
+          React.createElement(Text, { style: styles.pageSubtitle, componentId: 'spaces-page-subtitle' }, 'An at-a-glance view of every parking slot.'),
+          React.createElement(SpaceCard, { spaces: spacesQuery.data, id: 'spaces-status', onSpace: changeSpace }),
+          React.createElement(Text, { style: styles.hint, componentId: 'spaces-hint' }, 'Tap a space to mark it unavailable or available.'),
+          React.createElement(View, { style: styles.sectionHeader, componentId: 'spaces-recent-heading' },
+            React.createElement(Text, { style: styles.sectionTitle, componentId: 'spaces-recent-title' }, 'Recently changed')
+          ),
+          recent.length ? React.createElement(View, { style: styles.listCard, componentId: 'spaces-recent-list' },
+            recent.map(function(item, index) {
+              var space = spacesQuery.data.find(function(s) { return s?.id === item.parking_space_id; });
+              return React.createElement(MovementRow, {
+                key: String(item.id || index), item: item, id: 'spaces-recent-' + index,
+                meta: (space?.space_label || 'Space') + ' · ' + (item.parking_status === 'inside' ? 'Occupied' : 'Available'),
+                onPress: function() { props.navigation.getParent()?.navigate('MovementDetail', { movementId: item.id }); }
+              });
+            })
+          ) : React.createElement(Text, { style: styles.emptyLine, componentId: 'spaces-recent-empty' }, 'No recent space changes.')
+        )
+      )
+    );
+  };
+  // @end:SpacesScreen
+
+  // @section:ActivityScreen @depends:[ThemeContext,MovementRow,styles]
+  var ActivityScreen = function(props) {
+    var insets = useSafeAreaInsets();
+    var windowHeight = useWindowDimensions().height;
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var movementsQuery = useQuery('vehicle_movements');
+    var spacesQuery = useQuery('parking_spaces');
+    var periodState = useState('Daily');
+    var period = periodState[0];
+    var setPeriod = periodState[1];
+    var now = new Date();
+    var start = new Date(now);
+    if (period === 'Daily') start.setHours(0, 0, 0, 0);
+    if (period === 'Weekly') start.setDate(now.getDate() - 7);
+    if (period === 'Monthly') start.setMonth(now.getMonth() - 1);
+    var rows = sortedMovements(movementsQuery.data).filter(function(item) {
+      return new Date(item?.entry_at || 0) >= start || (item?.exit_at && new Date(item.exit_at) >= start);
+    });
+    var total = rows.reduce(function(count, item) {
+      return count + (new Date(item?.entry_at || 0) >= start ? 1 : 0) + (item?.exit_at && new Date(item.exit_at) >= start ? 1 : 0);
+    }, 0);
+    var occupied = spacesQuery.data.filter(function(space) { return space?.space_status === 'occupied'; }).length;
+    var totalSpaces = spacesQuery.data.length;
+    var hours = [6, 8, 10, 12, 14, 16, 18, 20];
+    var entries = hours.map(function(hour) {
+      return rows.filter(function(item) { return new Date(item?.entry_at || 0).getHours() >= hour && new Date(item?.entry_at || 0).getHours() < hour + 2 && new Date(item?.entry_at || 0) >= start; }).length;
+    });
+    var exits = hours.map(function(hour) {
+      return rows.filter(function(item) { return item?.exit_at && new Date(item.exit_at) >= start && new Date(item.exit_at).getHours() >= hour && new Date(item.exit_at).getHours() < hour + 2; }).length;
+    });
+    var peak = Math.max(1, ...entries, ...exits);
+    return React.createElement(View, { style: styles.screen, componentId: 'activity-screen' },
+      React.createElement(StatusBar, { backgroundColor: theme.colors.background, barStyle: 'dark-content', componentId: 'activity-status-bar' }),
+      React.createElement(View, { style: { paddingTop: insets.top }, componentId: 'activity-top' }, header('Activity', null, null, 'activity')),
+      React.createElement(ScrollView, {
+        style: { height: windowHeight - insets.top - insets.bottom - 56 },
+        contentContainerStyle: { paddingTop: 12, paddingHorizontal: 16, paddingBottom: TAB_MENU_HEIGHT + insets.bottom + SCROLL_EXTRA_PADDING, alignItems: 'center' },
+        componentId: 'activity-scroll'
+      },
+        React.createElement(View, { style: styles.content, componentId: 'activity-page-content' },
+          React.createElement(Text, { style: styles.pageTitle, componentId: 'activity-page-title' }, 'Reports & analytics'),
+          React.createElement(Text, { style: styles.pageSubtitle, componentId: 'activity-page-subtitle' }, 'Activity calculated from your vehicle records.'),
+          React.createElement(View, { style: styles.segment, componentId: 'activity-period' },
+            ['Daily', 'Weekly', 'Monthly'].map(function(option) {
+              return React.createElement(TouchableOpacity, {
+                key: option, style: [styles.segmentOption, period === option ? styles.segmentSelected : null],
+                activeOpacity: 0.7, onPress: function() {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setPeriod(option);
+                }, componentId: 'activity-period-' + option
+              }, React.createElement(Text, {
+                style: [styles.segmentText, period === option ? styles.segmentTextSelected : null],
+                componentId: 'activity-period-label-' + option
+              }, option));
+            })
+          ),
+          movementsQuery.data.length ? React.createElement(View, { componentId: 'activity-content' },
+            React.createElement(View, { style: styles.activityCard, componentId: 'activity-summary' },
+              React.createElement(View, { style: styles.cardHeading, componentId: 'activity-summary-heading' },
+                React.createElement(Text, { style: styles.sectionTitle, componentId: 'activity-lot-title' }, 'North lot overview'),
+                React.createElement(Text, { style: styles.smallText, componentId: 'activity-caption' }, period)
+              ),
+              React.createElement(View, { style: styles.metrics, componentId: 'activity-metrics' },
+                React.createElement(View, { style: styles.metric, componentId: 'activity-movements-metric' },
+                  React.createElement(Text, { style: styles.bigNumber, componentId: 'activity-movements-value' }, String(total)),
+                  React.createElement(Text, { style: styles.subLabel, componentId: 'activity-movements-label' }, 'Vehicle movements')
+                ),
+                React.createElement(View, { style: styles.metric, componentId: 'activity-occupancy-metric' },
+                  React.createElement(Text, { style: styles.bigNumber, componentId: 'activity-occupancy-value' }, occupied + '/' + totalSpaces),
+                  React.createElement(Text, { style: styles.subLabel, componentId: 'activity-occupancy-label' }, 'Current occupancy')
+                )
+              ),
+              React.createElement(View, { style: styles.divider, componentId: 'activity-divider' }),
+              React.createElement(View, { style: styles.occupancyLine, componentId: 'activity-occupancy-line' },
+                React.createElement(Text, { style: styles.subLabel, componentId: 'activity-occupancy-line-label' }, 'Parking utilization'),
+                React.createElement(Text, { style: styles.detailValue, componentId: 'activity-percentage' },
+                  (totalSpaces ? Math.round(occupied / totalSpaces * 100) : 0) + '%')
+              ),
+              React.createElement(View, { style: styles.progressTrack, componentId: 'activity-progress-track' },
+                React.createElement(View, { style: [styles.progressFill, { width: (totalSpaces ? Math.round(occupied / totalSpaces * 100) : 0) + '%' }], componentId: 'activity-progress-fill' }))
+            ),
+            React.createElement(View, { style: styles.activityCard, componentId: 'activity-peak-card' },
+              React.createElement(View, { style: styles.cardHeading, componentId: 'activity-peak-heading' },
+                React.createElement(Text, { style: styles.sectionTitle, componentId: 'activity-peak-title' }, 'Peak parking hours'),
+                React.createElement(Text, { style: styles.smallText, componentId: 'activity-peak-caption' }, 'Entries & exits')
+              ),
+              React.createElement(View, { style: styles.chart, componentId: 'activity-chart' },
+                entries.map(function(value, index) {
+                  return React.createElement(View, { key: String(index), style: styles.chartColumn, componentId: 'activity-column-' + index },
+                    React.createElement(View, { style: [styles.chartBar, { height: Math.max(6, Math.round(value / peak * 96)), backgroundColor: accentColor }], componentId: 'activity-bar-' + index }),
+                    React.createElement(View, { style: [styles.chartBar, { height: Math.max(6, Math.round(exits[index] / peak * 96)), backgroundColor: primaryColor }], componentId: 'activity-exit-bar-' + index })
+                  );
+                })
+              ),
+              React.createElement(View, { style: styles.chartLabels, componentId: 'activity-hour-labels' },
+                hours.map(function(hour) {
+                  return React.createElement(Text, { key: String(hour), style: styles.hourLabel, componentId: 'activity-hour-' + hour }, String(hour).padStart(2, '0'));
+                })
+              ),
+              React.createElement(View, { style: styles.legend, componentId: 'activity-chart-legend' },
+                React.createElement(Text, { style: styles.smallText, componentId: 'activity-entry-legend' }, '● Entries'),
+                React.createElement(Text, { style: styles.smallText, componentId: 'activity-exit-legend' }, '● Exits'))
+            ),
+            React.createElement(View, { style: styles.sectionHeader, componentId: 'activity-latest-heading' },
+              React.createElement(Text, { style: styles.sectionTitle, componentId: 'activity-latest-title' }, 'Latest movements'),
+              React.createElement(Text, { style: styles.smallText, componentId: 'activity-latest-period' }, period)
+            ),
+            rows.length ? React.createElement(View, { style: styles.listCard, componentId: 'activity-latest-list' },
+              rows.slice(0, 5).map(function(item, index) {
+                return React.createElement(MovementRow, {
+                  key: String(item.id || index), item: item, id: 'activity-latest-' + index,
+                  onPress: function() { props.navigation.getParent()?.navigate('MovementDetail', { movementId: item.id }); }
+                });
+              })
+            ) : React.createElement(Text, { style: styles.emptyLine, componentId: 'activity-period-empty' }, 'No movements in this period.')
+          ) : React.createElement(View, { style: styles.emptyPanel, componentId: 'activity-empty' },
+            React.createElement(View, { style: styles.emptyMark, componentId: 'activity-empty-mark' }, icon('car-outline', primaryColor, 28, 'activity-empty-icon')),
+            React.createElement(Text, { style: styles.sectionTitle, componentId: 'activity-empty-title' }, 'No activity statistics yet'),
+            React.createElement(Text, { style: styles.emptyCopy, componentId: 'activity-empty-copy' },
+              'Record vehicle movements at North lot to see daily, weekly and monthly activity.'),
+            React.createElement(TouchableOpacity, {
+              style: styles.primaryButton, activeOpacity: 0.7,
+              onPress: function() { props.navigation.getParent()?.navigate('RecordMovement'); },
+              componentId: 'activity-record'
+            }, React.createElement(Text, { style: styles.primaryButtonText, componentId: 'activity-record-text' }, 'Record a movement'))
+          )
+        )
+      )
+    );
+  };
+  // @end:ActivityScreen
+
+  // @section:RecordMovementScreen @depends:[ThemeContext,styles]
+  var RecordMovementScreen = function(props) {
+    var insets = useSafeAreaInsets();
+    var windowHeight = useWindowDimensions().height;
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var locationHook = useLocation();
+    var spacesQuery = useQuery('parking_spaces');
+    var movementsQuery = useQuery('vehicle_movements');
+    var insertMovement = useMutation('vehicle_movements', 'insert');
+    var updateMovement = useMutation('vehicle_movements', 'update');
+    var updateSpace = useMutation('parking_spaces', 'update');
+    var plateState = useState('');
+    var plate = plateState[0];
+    var setPlate = plateState[1];
+    var modeState = useState('Entry');
+    var mode = modeState[0];
+    var setMode = modeState[1];
+    var spaceState = useState('');
+    var selectedSpaceId = spaceState[0];
+    var setSelectedSpaceId = spaceState[1];
+    var busyState = useState(false);
+    var busy = busyState[0];
+    var setBusy = busyState[1];
+    var locationState = useState('North lot');
+    var locationLabel = locationState[0];
+    var setLocationLabel = locationState[1];
+    var active = sortedMovements(movementsQuery.data).filter(function(item) { return item?.parking_status === 'inside'; });
+    var selectedActive = active.find(function(item) { return String(item?.registration_number || '').toUpperCase() === plate.trim().toUpperCase(); });
+    var available = spacesQuery.data.filter(function(space) { return space?.space_status === 'available'; });
+    var chosenSpace = available.find(function(space) { return space?.id === selectedSpaceId; }) || available[0];
+    var checkLocation = function() {
+      locationHook.getCurrentLocation().then(function(result) {
+        if (result.error) {
+          notify('Location unavailable', result.error);
+          return;
+        }
+        setLocationLabel('North lot · location confirmed');
+      }, function(error) { notify('Location unavailable', error.message); });
+    };
+    var save = function() {
+      var registration = plate.trim().toUpperCase();
+      if (!registration) { notify('Registration required', 'Enter a vehicle registration number.'); return; }
+      if (busy) return;
+      if (mode === 'Entry' && selectedActive) { notify('Already parked', 'This vehicle already has an active entry.'); return; }
+      if (mode === 'Exit' && !selectedActive) { notify('No active entry', 'Select an active vehicle to record its exit.'); return; }
+      setBusy(true);
+      if (mode === 'Entry') {
+        insertMovement.mutate({
+          registration_number: registration, entry_at: new Date().toISOString(),
+          parking_status: 'inside', parking_space_id: chosenSpace?.id || null
+        }).then(function() {
+          if (chosenSpace?.id) return updateSpace.mutate({ id: chosenSpace.id, data: { space_status: 'occupied' } });
+        }).then(function() {
+          movementsQuery.refetch();
+          spacesQuery.refetch();
+          setBusy(false);
+          props.navigation.goBack();
+        }, function(error) { setBusy(false); notify('Could not record entry', error.message); });
+      } else {
+        var exitedAt = new Date();
+        var minutes = Math.max(0, Math.round((exitedAt.getTime() - new Date(selectedActive.entry_at).getTime()) / 60000));
+        updateMovement.mutate({
+          id: selectedActive.id,
+          data: { exit_at: exitedAt.toISOString(), duration_minutes: minutes, parking_status: 'exited' }
+        }).then(function() {
+          if (selectedActive.parking_space_id) {
+            return updateSpace.mutate({ id: selectedActive.parking_space_id, data: { space_status: 'available' } });
+          }
+        }).then(function() {
+          movementsQuery.refetch();
+          spacesQuery.refetch();
+          setBusy(false);
+          props.navigation.goBack();
+        }, function(error) { setBusy(false); notify('Could not record exit', error.message); });
+      }
+    };
+    return React.createElement(View, { style: [styles.screen, { paddingBottom: insets.bottom }], componentId: 'record-screen' },
+      React.createElement(StatusBar, { backgroundColor: theme.colors.background, barStyle: 'dark-content', componentId: 'record-status-bar' }),
+      React.createElement(View, { style: [styles.header, { marginTop: insets.top, justifyContent: 'flex-start' }], componentId: 'record-header' },
+        React.createElement(TouchableOpacity, { style: styles.iconButton, activeOpacity: 0.7, onPress: function() { props.navigation.goBack(); }, componentId: 'record-close' },
+          icon('close', textPrimary, 24, 'record-close-icon')),
+        React.createElement(Text, { style: styles.headerTitle, componentId: 'record-title' }, 'Record movement')
+      ),
+      React.createElement(ScrollView, {
+        style: { height: windowHeight - insets.top - insets.bottom - 124 },
+        contentContainerStyle: { paddingTop: 16, paddingHorizontal: 16, paddingBottom: insets.bottom + SCROLL_EXTRA_PADDING, alignItems: 'center' },
+        componentId: 'record-scroll'
+      },
+        React.createElement(View, { style: styles.formContent, componentId: 'record-form' },
+          React.createElement(Text, { style: styles.pageSubtitle, componentId: 'record-subtitle' }, 'Keep the North lot movement log up to date.'),
+          React.createElement(Text, { style: styles.fieldLabel, componentId: 'record-registration-label' }, 'Registration'),
+          React.createElement(TextInput, {
+            style: styles.plateInput, value: plate, onChangeText: setPlate,
+            placeholder: 'Enter registration', placeholderTextColor: textSecondary,
+            autoCapitalize: 'characters', autoCorrect: false, keyboardType: 'default',
+            componentId: 'record-registration'
+          }),
+          React.createElement(Text, { style: styles.fieldLabel, componentId: 'record-mode-label' }, 'Movement'),
+          React.createElement(View, { style: styles.segment, componentId: 'record-mode-switch' },
+            ['Entry', 'Exit'].map(function(option) {
+              return React.createElement(TouchableOpacity, {
+                key: option, style: [styles.segmentOption, mode === option ? styles.segmentSelected : null],
+                activeOpacity: 0.7, onPress: function() {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setMode(option);
+                  setPlate('');
+                }, componentId: 'record-mode-' + option
+              }, React.createElement(Text, {
+                style: [styles.segmentText, mode === option ? styles.segmentTextSelected : null],
+                componentId: 'record-mode-text-' + option
+              }, option));
+            })
+          ),
+          React.createElement(Text, { style: styles.fieldLabel, componentId: 'record-lot-label' }, 'Parking lot'),
+          React.createElement(TouchableOpacity, {
+            style: styles.choiceCard, activeOpacity: 0.7, onPress: checkLocation, componentId: 'record-lot'
+          },
+            icon('location-outline', accentColor, 24, 'record-lot-icon'),
+            React.createElement(View, { style: { flex: 1 }, componentId: 'record-lot-copy' },
+              React.createElement(Text, { style: styles.choiceTitle, componentId: 'record-lot-title' }, 'North lot'),
+              React.createElement(Text, { style: styles.smallText, componentId: 'record-lot-meta' }, locationLabel)
+            ),
+            icon('chevron-forward', textSecondary, 20, 'record-lot-chevron')
+          ),
+          React.createElement(Text, { style: styles.fieldLabel, componentId: 'record-space-label' }, mode === 'Entry' ? 'Available space' : 'Parking space'),
+          mode === 'Entry' ? React.createElement(View, { style: styles.spaceChoices, componentId: 'record-space-choices' },
+            available.length ? available.map(function(space, index) {
+              var selected = (chosenSpace?.id === space?.id);
+              return React.createElement(TouchableOpacity, {
+                key: String(space?.id || index), style: [styles.spaceChoice, selected ? styles.spaceChoiceSelected : null],
+                activeOpacity: 0.7, onPress: function() { setSelectedSpaceId(space.id); },
+                componentId: 'record-space-' + index
+              }, React.createElement(Text, {
+                style: [styles.bayText, selected ? styles.bayOccupiedText : null],
+                componentId: 'record-space-text-' + index
+              }, space?.space_label || '—'));
+            }) : React.createElement(Text, { style: styles.emptyLine, componentId: 'record-no-spaces' }, 'No available spaces. Entry can still be recorded without a space.')
+          ) : React.createElement(View, { style: styles.choiceCard, componentId: 'record-exit-space' },
+            React.createElement(Text, { style: styles.choiceTitle, componentId: 'record-exit-space-text' },
+              spacesQuery.data.find(function(space) { return space?.id === selectedActive?.parking_space_id; })?.space_label || 'Select an active vehicle')
+          ),
+          React.createElement(Text, { style: [styles.sectionTitle, { marginTop: 24, marginBottom: 8 }], componentId: 'record-recent-title' },
+            mode === 'Exit' ? 'Active vehicles' : 'Recent vehicles'),
+          React.createElement(View, { style: styles.listCard, componentId: 'record-suggestions' },
+            (mode === 'Exit' ? active : sortedMovements(movementsQuery.data).slice(0, 3)).length ?
+              (mode === 'Exit' ? active : sortedMovements(movementsQuery.data).slice(0, 3)).map(function(item, index) {
+                return React.createElement(TouchableOpacity, {
+                  key: String(item.id || index), style: styles.suggestionRow, activeOpacity: 0.7,
+                  onPress: function() { setPlate(item.registration_number || ''); },
+                  componentId: 'record-suggestion-' + index
+                },
+                  React.createElement(Text, { style: styles.plate, numberOfLines: 1, componentId: 'record-suggestion-plate-' + index }, item.registration_number || '—'),
+                  React.createElement(Text, { style: styles.smallText, componentId: 'record-suggestion-time-' + index }, timeOf(movementTime(item)))
+                );
+              }) : React.createElement(Text, { style: styles.emptyLine, componentId: 'record-suggestions-empty' }, 'No vehicles to show.')
+          )
+        )
+      ),
+      React.createElement(View, { style: styles.pinnedAction, componentId: 'record-action-wrap' },
+        React.createElement(TouchableOpacity, {
+          style: styles.primaryButton, activeOpacity: 0.7, onPress: save, disabled: busy, componentId: 'record-save'
+        }, React.createElement(Text, { style: styles.primaryButtonText, componentId: 'record-save-text' },
+          busy ? 'Saving…' : 'Record ' + mode.toLowerCase()))
+      )
+    );
+  };
+  // @end:RecordMovementScreen
+
+  // @section:MovementDetailScreen @depends:[ThemeContext,styles]
+  var MovementDetailScreen = function(props) {
+    var insets = useSafeAreaInsets();
+    var windowHeight = useWindowDimensions().height;
+    var themeContext = useTheme();
+    var theme = themeContext.theme;
+    var movementsQuery = useQuery('vehicle_movements');
+    var spacesQuery = useQuery('parking_spaces');
+    var movementId = props.route?.params?.movementId || null;
+    var item = movementsQuery.data.find(function(row) { return row?.id === movementId; }) || null;
+    var space = spacesQuery.data.find(function(row) { return row?.id === item?.parking_space_id; });
+    var duration = item?.parking_status === 'inside'
+      ? Math.max(0, Math.round((Date.now() - new Date(item.entry_at).getTime()) / 60000))
+      : item?.duration_minutes || 0;
+    var history = sortedMovements(movementsQuery.data).filter(function(row) { return row?.id !== movementId; }).slice(0, 4);
+    return React.createElement(View, { style: [styles.screen, { paddingBottom: insets.bottom }], componentId: 'detail-screen' },
+      React.createElement(StatusBar, { backgroundColor: theme.colors.background, barStyle: 'dark-content', componentId: 'detail-status-bar' }),
+      React.createElement(View, { style: [styles.header, { marginTop: insets.top, justifyContent: 'flex-start' }], componentId: 'detail-header' },
+        React.createElement(TouchableOpacity, {
+          style: styles.iconButton, activeOpacity: 0.7, onPress: function() { props.navigation.goBack(); }, componentId: 'detail-back'
+        }, icon('chevron-back', textPrimary, 24, 'detail-back-icon')),
+        React.createElement(Text, { style: styles.headerTitle, componentId: 'detail-title' }, 'Movement details')
+      ),
+      React.createElement(ScrollView, {
+        style: { height: windowHeight - insets.top - insets.bottom - 56 },
+        contentContainerStyle: { paddingTop: 16, paddingHorizontal: 16, paddingBottom: insets.bottom + SCROLL_EXTRA_PADDING, alignItems: 'center' },
+        componentId: 'detail-scroll'
+      },
+        React.createElement(View, { style: styles.content, componentId: 'detail-content' },
+          React.createElement(View, { style: styles.activityCard, componentId: 'detail-vehicle-card' },
+            React.createElement(View, { style: styles.cardHeading, componentId: 'detail-vehicle-heading' },
+              React.createElement(View, { style: { flex: 1 }, componentId: 'detail-vehicle-copy' },
+                React.createElement(Text, { style: styles.overline, componentId: 'detail-vehicle-overline' }, 'VEHICLE REGISTRATION'),
+                React.createElement(Text, { style: styles.bigNumber, numberOfLines: 1, componentId: 'detail-vehicle-plate' },
+                  item?.registration_number || 'No vehicle selected')
+              ),
+              React.createElement(View, { style: [styles.statusPill, item?.parking_status === 'exited' ? styles.exitedPill : null], componentId: 'detail-status-pill' },
+                React.createElement(Text, { style: styles.statusPillText, componentId: 'detail-status-text' },
+                  item?.parking_status === 'inside' ? 'Parked' : 'Exited')
+              )
+            ),
+            React.createElement(Text, { style: styles.subLabel, componentId: 'detail-location' },
+              'North lot · ' + (space?.space_label ? 'space ' + space.space_label : 'no assigned space')),
+            React.createElement(View, { style: styles.durationBlock, componentId: 'detail-duration' },
+              React.createElement(Text, { style: styles.overline, componentId: 'detail-duration-label' }, 'PARKING DURATION'),
+              React.createElement(Text, { style: styles.bigNumber, componentId: 'detail-duration-value' }, item ? durationOf(duration) : '—')
+            )
+          ),
+          React.createElement(Text, { style: styles.detailSectionTitle, componentId: 'detail-record-title' }, 'Movement record'),
+          React.createElement(View, { style: styles.listCard, componentId: 'detail-record-list' },
+            [
+              ['Entered', dateOf(item?.entry_at)],
+              ['Parking space', space?.space_label || 'Not assigned'],
+              ['Exit', item?.exit_at ? dateOf(item.exit_at) : 'Not yet exited'],
+              ['Current status', item?.parking_status === 'inside' ? 'On site' : 'Exited']
+            ].map(function(entry, index) {
+              return React.createElement(View, { key: String(index), style: styles.detailRow, componentId: 'detail-record-' + index },
+                React.createElement(Text, { style: styles.subLabel, componentId: 'detail-record-label-' + index }, entry[0]),
+                React.createElement(Text, { style: styles.detailValue, numberOfLines: 1, componentId: 'detail-record-value-' + index }, entry[1])
+              );
+            })
+          ),
+          React.createElement(Text, { style: styles.detailSectionTitle, componentId: 'detail-history-title' }, 'Recent movements'),
+          history.length ? React.createElement(View, { style: styles.listCard, componentId: 'detail-history-list' },
+            history.map(function(row, index) {
+              return React.createElement(MovementRow, {
+                key: String(row.id || index), item: row, id: 'detail-history-' + index,
+                onPress: function() { props.navigation.push('MovementDetail', { movementId: row.id }); }
+              });
+            })
+          ) : React.createElement(Text, { style: styles.emptyLine, componentId: 'detail-history-empty' }, 'No other movements recorded.')
+        )
+      )
+    );
+  };
+  // @end:MovementDetailScreen
+
+  // @section:styles @depends:[theme]
+  const styles = StyleSheet.create({
+    screen: { flex: 1, backgroundColor: backgroundColor },
+    content: { width: '100%', maxWidth: 1180 },
+    formContent: { width: '100%', maxWidth: 700 },
+    header: { height: 56, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: cardColor, borderBottomWidth: 1, borderBottomColor: borderColor },
+    headerBrand: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
+    headerBrandMark: { width: 32, height: 32, borderRadius: 10, backgroundColor: primaryColor, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontSize: 19, lineHeight: 24, fontWeight: '700', color: primaryColor, flexShrink: 1 },
+    iconButton: { width: 48, height: 48, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+    pageTitle: { fontSize: 27, lineHeight: 34, fontWeight: '800', color: primaryColor, letterSpacing: -0.5 },
+    pageSubtitle: { fontSize: 14, lineHeight: 21, color: textSecondary, marginTop: 4, marginBottom: 18 },
+    welcomeRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    dateChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: cardColor, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radiusSm, borderWidth: 1, borderColor: borderColor },
+    dateText: { color: primaryColor, fontSize: 11, fontWeight: '600' },
+    dashboardToolbar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 18 },
+    dashboardSearch: { flex: 1, height: 44, backgroundColor: cardColor, borderRadius: radiusSm, borderWidth: 1, borderColor: borderColor, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    toolbarIcon: { width: 44, height: 44, borderRadius: radiusSm, backgroundColor: cardColor, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: borderColor },
+    profileChip: { height: 44, paddingHorizontal: 8, borderRadius: radiusSm, backgroundColor: cardColor, borderWidth: 1, borderColor: borderColor, flexDirection: 'row', alignItems: 'center', gap: 6 },
+    avatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: primaryColor, alignItems: 'center', justifyContent: 'center' },
+    avatarText: { color: onAccentColor, fontWeight: '700', fontSize: 13 },
+    profileText: { color: textPrimary, fontSize: 12, fontWeight: '700' },
+    statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
+    statCard: { minHeight: 132, borderRadius: radiusMd, backgroundColor: cardColor, padding: 15, borderWidth: 1, borderColor: borderColor, shadowColor: primaryColor, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2 },
+    statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+    statValue: { fontSize: 26, lineHeight: 31, fontWeight: '800', color: primaryColor },
+    statLabel: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: textSecondary, marginTop: 4 },
+    card: { backgroundColor: cardColor, borderRadius: radiusMd, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: borderColor, shadowColor: primaryColor, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2 },
+    statusHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
+    statusCopy: { flex: 1, minWidth: 0 },
+    overline: { color: textSecondary, fontSize: 11, lineHeight: 15, fontWeight: '700', letterSpacing: 1, marginBottom: 6 },
+    occupancy: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+    bigNumber: { fontSize: 34, lineHeight: 43, fontWeight: '800', color: primaryColor, letterSpacing: -0.7 },
+    subLabel: { fontSize: 13, lineHeight: 19, color: textSecondary },
+    openCount: { minWidth: 78, padding: 10, borderRadius: radiusSm, backgroundColor: surfaceAltColor, alignItems: 'center' },
+    openNumber: { color: accentColor, fontSize: 22, lineHeight: 27, fontWeight: '800' },
+    openLabel: { color: accentColor, fontSize: 10, lineHeight: 14, fontWeight: '700' },
+    bayRows: { gap: 9, marginTop: 20 },
+    bayRow: { flexDirection: 'row', gap: 9 },
+    bay: { flex: 1, minWidth: 0, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: surfaceAltColor, borderRadius: radiusSm, borderWidth: 1, borderColor: '#BDE6D0' },
+    bayOccupied: { backgroundColor: '#FCEDEF', borderColor: '#F0B9BF' },
+    bayUnavailable: { backgroundColor: '#EFF1F4', borderColor: '#D8DEE5' },
+    bayText: { fontSize: 13, lineHeight: 17, fontWeight: '700', color: accentColor },
+    bayOccupiedText: { color: occupiedColor },
+    legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 16 },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+    legendMark: { width: 10, height: 10, borderRadius: radiusPill },
+    smallText: { fontSize: 12, lineHeight: 17, color: textSecondary },
+    sectionHeader: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+    sectionTitle: { fontSize: 18, lineHeight: 24, fontWeight: '700', color: primaryColor },
+    textAction: { minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'flex-end' },
+    actionText: { fontSize: 13, lineHeight: 18, color: accentColor, fontWeight: '700' },
+    listCard: { backgroundColor: cardColor, borderRadius: radiusMd, paddingHorizontal: 14, marginBottom: 16, borderWidth: 1, borderColor: borderColor },
+    movementRow: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor },
+    movementIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EDF2F8', borderRadius: radiusSm },
+    movementCopy: { flex: 1, minWidth: 0 },
+    plate: { fontSize: 15, lineHeight: 20, fontWeight: '700', color: textPrimary, flexShrink: 1 },
+    movementMeta: { fontSize: 12, lineHeight: 16, color: textSecondary, marginTop: 4 },
+    movementTime: { fontSize: 12, lineHeight: 16, color: textSecondary },
+    movementStatus: { fontSize: 11, lineHeight: 16, fontWeight: '700', color: accentColor, backgroundColor: surfaceAltColor, paddingHorizontal: 7, paddingVertical: 4, borderRadius: radiusPill },
+    exitedStatus: { color: textSecondary, backgroundColor: '#EFF2F5' },
+    emptyLine: { fontSize: 14, lineHeight: 20, color: textSecondary, padding: 16 },
+    emptyPanel: { alignItems: 'center', padding: 28, gap: 12, backgroundColor: cardColor, borderRadius: radiusMd, marginBottom: 16, borderWidth: 1, borderColor: borderColor },
+    emptyMark: { width: 64, height: 64, borderRadius: radiusMd, backgroundColor: surfaceAltColor, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+    emptyCopy: { fontSize: 14, lineHeight: 20, color: textSecondary, textAlign: 'center' },
+    primaryButton: { minHeight: 52, minWidth: 48, width: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: accentColor, borderRadius: radiusSm, paddingHorizontal: 16 },
+    primaryButtonText: { fontSize: 15, lineHeight: 20, fontWeight: '700', color: onAccentColor },
+    search: { height: 52, backgroundColor: cardColor, borderRadius: radiusSm, borderWidth: 1, borderColor: borderColor, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+    searchInput: { flex: 1, height: 50, fontSize: 15, color: textPrimary },
+    filterRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 7, marginBottom: 12 },
+    filterChip: { paddingHorizontal: 13, minHeight: 38, justifyContent: 'center', borderRadius: radiusPill, backgroundColor: cardColor, borderWidth: 1, borderColor: borderColor },
+    filterChipActive: { backgroundColor: primaryColor, borderColor: primaryColor },
+    filterText: { color: textSecondary, fontSize: 12, fontWeight: '700' },
+    filterTextActive: { color: onAccentColor },
+    sortButton: { minHeight: 38, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8 },
+    hint: { fontSize: 12, lineHeight: 18, color: textSecondary, marginBottom: 8 },
+    segment: { height: 50, flexDirection: 'row', backgroundColor: '#E8EDF2', borderRadius: radiusSm, padding: 4, marginBottom: 16 },
+    segmentOption: { flex: 1, minHeight: 42, minWidth: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 9 },
+    segmentSelected: { backgroundColor: cardColor, shadowColor: primaryColor, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, elevation: 1 },
+    segmentText: { fontSize: 13, lineHeight: 18, fontWeight: '700', color: textSecondary },
+    segmentTextSelected: { color: primaryColor },
+    activityCard: { padding: 18, backgroundColor: cardColor, borderRadius: radiusMd, marginBottom: 16, borderWidth: 1, borderColor: borderColor },
+    cardHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+    metrics: { flexDirection: 'row', gap: 24, marginTop: 20 },
+    metric: { flex: 1, minWidth: 0 },
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: borderColor, marginTop: 18 },
+    occupancyLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14 },
+    progressTrack: { height: 8, borderRadius: radiusPill, backgroundColor: '#E8EDF2', marginTop: 12 },
+    progressFill: { height: 8, borderRadius: radiusPill, backgroundColor: accentColor },
+    detailValue: { fontSize: 14, lineHeight: 20, fontWeight: '700', color: textPrimary, flexShrink: 1, textAlign: 'right' },
+    chart: { height: 116, marginTop: 20, flexDirection: 'row', alignItems: 'flex-end', gap: 7, borderBottomWidth: 1, borderBottomColor: borderColor },
+    chartColumn: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: 3, height: 108 },
+    chartBar: { flex: 1, maxWidth: 18, borderTopLeftRadius: 4, borderTopRightRadius: 4 },
+    chartLabels: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 8 },
+    hourLabel: { fontSize: 11, lineHeight: 14, color: textSecondary },
+    fieldLabel: { color: textPrimary, fontSize: 13, lineHeight: 18, fontWeight: '700', marginBottom: 8, marginTop: 8 },
+    plateInput: { height: 56, backgroundColor: cardColor, borderWidth: 1, borderColor: borderColor, borderRadius: radiusSm, paddingHorizontal: 16, fontSize: 18, fontWeight: '700', color: textPrimary, marginBottom: 16 },
+    choiceCard: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, backgroundColor: cardColor, borderRadius: radiusSm, borderWidth: 1, borderColor: borderColor, marginBottom: 16 },
+    choiceTitle: { fontSize: 15, lineHeight: 20, fontWeight: '700', color: textPrimary },
+    spaceChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+    spaceChoice: { minWidth: 48, minHeight: 48, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: radiusSm, backgroundColor: surfaceAltColor },
+    spaceChoiceSelected: { backgroundColor: accentColor },
+    suggestionRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor },
+    pinnedAction: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, backgroundColor: cardColor, borderTopWidth: 1, borderTopColor: borderColor, alignItems: 'center' },
+    statusPill: { paddingHorizontal: 12, paddingVertical: 7, backgroundColor: accentColor, borderRadius: radiusPill },
+    exitedPill: { backgroundColor: textSecondary },
+    statusPillText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: onAccentColor },
+    durationBlock: { marginTop: 16, paddingTop: 16, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: borderColor },
+    detailSectionTitle: { minHeight: 48, marginTop: 8, fontSize: 18, lineHeight: 48, fontWeight: '700', color: textPrimary },
+    detailRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor },
+    sidebar: { width: 234, height: '100%', backgroundColor: primaryColor, paddingHorizontal: 13, paddingTop: 24, paddingBottom: 20 },
+    sidebarLogo: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, marginBottom: 28 },
+    sidebarLogoMark: { width: 38, height: 38, borderRadius: 11, backgroundColor: accentColor, alignItems: 'center', justifyContent: 'center' },
+    sidebarLogoText: { fontSize: 21, fontWeight: '800', color: onAccentColor },
+    sidebarCaption: { color: '#92A8BD', fontSize: 10, fontWeight: '700', letterSpacing: 1.3, paddingHorizontal: 12, marginBottom: 10 },
+    sidebarItem: { minHeight: 44, borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 3 },
+    sidebarItemActive: { backgroundColor: '#244561' },
+    sidebarItemText: { color: '#C7D4DF', fontSize: 12, fontWeight: '600', flexShrink: 1 },
+    sidebarItemTextActive: { color: onAccentColor, fontWeight: '700' },
+    sidebarFooter: { borderTopWidth: 1, borderTopColor: '#34506A', paddingTop: 14 }
+  });
+  // @end:styles
+
+  // @section:TabNavigator @depends:[HomeScreen,MovementsScreen,SpacesScreen,ActivityScreen,navigation-setup]
+  var TabNavigator = function(props) {
+    var insets = useSafeAreaInsets();
+    var width = useWindowDimensions().width;
+    var desktop = width >= 900;
+    var selectedState = useState('Dashboard');
+    var selected = selectedState[0];
+    var setSelected = selectedState[1];
+    var sidebarItems = [
+      ['Dashboard', 'grid-outline', 'Lot'],
+      ['Live Monitoring', 'pulse-outline', 'Spaces'],
+      ['Parking Slots', 'apps-outline', 'Spaces'],
+      ['Vehicle Management', 'car-sport-outline', 'Movements'],
+      ['Entry & Exit Records', 'swap-horizontal-outline', 'Movements'],
+      ['Revenue & Payments', 'card-outline', null],
+      ['Reports & Analytics', 'bar-chart-outline', 'Activity'],
+      ['Notifications', 'notifications-outline', null],
+      ['Staff Management', 'people-outline', null],
+      ['Settings', 'settings-outline', null]
+    ];
+    return React.createElement(View, { style: { flex: 1, width: '100%', height: '100%', flexDirection: 'row', overflow: 'hidden' }, componentId: 'tab-shell' },
+      desktop ? React.createElement(View, { style: styles.sidebar, componentId: 'desktop-sidebar' },
+        React.createElement(View, { style: styles.sidebarLogo, componentId: 'sidebar-logo' },
+          React.createElement(View, { style: styles.sidebarLogoMark, componentId: 'sidebar-logo-mark' }, icon('car-sport', onAccentColor, 23, 'sidebar-logo-icon')),
+          React.createElement(Text, { style: styles.sidebarLogoText, componentId: 'sidebar-logo-text' }, 'SmartPark')),
+        React.createElement(Text, { style: styles.sidebarCaption, componentId: 'sidebar-menu-caption' }, 'WORKSPACE'),
+        React.createElement(ScrollView, { style: { flex: 1 }, contentContainerStyle: { paddingBottom: 12 }, componentId: 'sidebar-scroll' },
+          sidebarItems.map(function(entry, index) {
+            return React.createElement(TouchableOpacity, {
+              key: entry[0], style: [styles.sidebarItem, selected === entry[0] ? styles.sidebarItemActive : null],
+              onPress: function() {
+                if (entry[2]) {
+                  setSelected(entry[0]);
+                  props.navigation.navigate('Main', { screen: entry[2] });
+                } else {
+                  notify(entry[0], entry[0] + ' is not configured in this local dashboard.');
+                }
+              },
+              componentId: 'sidebar-item-' + index
+            },
+              icon(entry[1], selected === entry[0] ? '#FFFFFF' : '#A6BACB', 19, 'sidebar-icon-' + index),
+              React.createElement(Text, { style: [styles.sidebarItemText, selected === entry[0] ? styles.sidebarItemTextActive : null], componentId: 'sidebar-label-' + index }, entry[0])
+            );
+          })
+        ),
+        React.createElement(View, { style: styles.sidebarFooter, componentId: 'sidebar-footer' },
+          React.createElement(TouchableOpacity, { style: styles.sidebarItem, onPress: function() { notify('Logout', 'A login session is not configured in this local dashboard.'); }, componentId: 'sidebar-logout' },
+            icon('log-out-outline', '#A6BACB', 19, 'sidebar-logout-icon'),
+            React.createElement(Text, { style: styles.sidebarItemText, componentId: 'sidebar-logout-label' }, 'Logout'))
+        )
+      ) : null,
+      React.createElement(View, { style: { flex: 1 }, componentId: 'tab-content' },
+        React.createElement(Tab.Navigator, {
+          screenOptions: function(options) {
+            return {
+              headerShown: false,
+              hikariLiquidGlass: true,
+              tabBarActiveTintColor: accentColor,
+              tabBarInactiveTintColor: textSecondary,
+              tabBarActiveBackgroundColor: cardColor,
+              tabBarInactiveBackgroundColor: cardColor,
+              tabBarLabelStyle: { fontSize: 11, lineHeight: 14, fontWeight: '700' },
+              tabBarItemStyle: { padding: 0 },
+              tabBarStyle: {
+                position: 'absolute', bottom: 0,
+                height: Platform.OS === 'web' ? TAB_MENU_HEIGHT : TAB_MENU_HEIGHT + insets.bottom,
+                paddingBottom: 0, borderTopWidth: 1, borderTopColor: borderColor, backgroundColor: cardColor,
+                display: desktop ? 'none' : 'flex'
+              },
+              tabBarIcon: function(info) {
+                var names = {
+                  Lot: info.focused ? 'home' : 'home-outline',
+                  Movements: info.focused ? 'list' : 'list-outline',
+                  Spaces: info.focused ? 'grid' : 'grid-outline',
+                  Activity: info.focused ? 'stats-chart' : 'stats-chart-outline'
+                };
+                return React.createElement(Ionicons, { name: names[options.route.name] || 'home-outline', color: info.color, size: 23 });
+              }
+            };
+          }
+        },
+          React.createElement(Tab.Screen, { name: 'Lot', component: HomeScreen }),
+          React.createElement(Tab.Screen, { name: 'Movements', component: MovementsScreen }),
+          React.createElement(Tab.Screen, { name: 'Spaces', component: SpacesScreen }),
+          React.createElement(Tab.Screen, { name: 'Activity', component: ActivityScreen })
+        )
+      )
+    );
+  };
+  // @end:TabNavigator
+
+  // @section:MainNavigator @depends:[TabNavigator,RecordMovementScreen,MovementDetailScreen,navigation-setup]
+  var MainNavigator = function() {
+    return React.createElement(Stack.Navigator, { screenOptions: { headerShown: false }, initialRouteName: 'Main' },
+      React.createElement(Stack.Screen, { name: 'Main', component: TabNavigator }),
+      React.createElement(Stack.Screen, { name: 'RecordMovement', component: RecordMovementScreen }),
+      React.createElement(Stack.Screen, { name: 'MovementDetail', component: MovementDetailScreen, initialParams: { movementId: null } })
+    );
+  };
+  // @end:MainNavigator
+
+  // @section:return @depends:[ThemeProvider,MainNavigator,sample-data]
+  if (seedSampleRows) seedSampleRows(SAMPLE_ROWS);
+  return React.createElement(ThemeProvider, null,
+    React.createElement(View, { style: { flex: 1, width: '100%', height: '100%' }, componentId: 'app-root' },
+      React.createElement(MainNavigator)
+    )
+  );var primaryColor = '#14213D';
+var accentColor = '#00B8A9';
+
+var backgroundColor = '#F2F6FA';
+var cardColor = '#FFFFFF';
+
+var textPrimary = '#14213D';
+var textSecondary = '#718096';
+
+var surfaceAltColor = '#E3F8F5';
+var borderColor = '#E2EAF0';
+
+var onAccentColor = '#FFFFFF';
+
+var occupiedColor = '#F05D68';
+var unavailableColor = '#A8B2BE';
+
+var radiusSm = 14;
+var radiusMd = 20;
+var radiusPill = 999;
+
+var visualDesign =
+  'Premium SmartPark dashboard with midnight navy and electric teal, modern graphical monitoring, live vehicle tracking and elegant cards.';
+  // @end:return
+};
+return ComponentFunction;

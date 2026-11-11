@@ -1,0 +1,6 @@
+{
+  "name": "SmartPark - Modern Parking & Live Monitoring Dashboard",
+  "description": "Premium parking operations dashboard with live vehicle tracking, interactive bay monitoring, movement logging, and analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
