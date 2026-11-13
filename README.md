@@ -1,81 +1,107 @@
-# SmartPark – Modern Parking & Live Monitoring Dashboard
+# SmartPark (Flutter) – Modern Parking & Live Monitoring
 
-A premium parking-operations dashboard for tracking vehicles, monitoring parking bays in real time, logging movements, and viewing analytics. It runs fully in the browser, can be installed as a PWA, and can be packaged as an Android APK.
+Flutter version of the SmartPark dashboard: live vehicle tracking, parking bay monitoring, movement logs, revenue and analytics, with an animated opening video. One codebase for Android, iOS and web.
+
+> **Status:** this README describes the planned Flutter structure. The existing SmartPark project is a React web app; the Flutter code still needs to be created. Packages and folder names below are suggestions, so change them to fit your final code.
 
 ## Features
 
-- **Dashboard** – live occupancy, available bays, entries and exits today, occupancy rate
-- **Parking map** – interactive bay grid grouped by zone (VIP & EV, covered canopy, and more)
-- **Auto Car Sense** – simulated plate-recognition gates that log entry timestamps automatically
-- **Live Monitoring** – real-time view of vehicles currently inside
-- **Vehicle Management & Movements** – check-in/check-out records, durations, search by plate
-- **Reports & Analytics** and **Revenue & Payments**
-- **Notifications**, **Staff Management**, **Settings**
-- Animated **opening intro video** with music (skippable)
-- Light/dark theme, responsive layout with mobile bottom navigation
-- Installable as a PWA, Android APK ready (Capacitor)
+- Opening intro video with music (skippable)
+- Dashboard: occupancy, free bays, entries/exits today
+- Interactive parking map grouped by zone
+- Auto Car Sense: simulated plate-recognition gates with automatic timestamps
+- Live monitoring, vehicle management, movement history, plate search
+- Reports, revenue and payments, notifications, staff, settings
+- Light and dark themes, responsive layout (phone and tablet)
 
-> The app currently uses built-in demo data (`src/data`). No backend or API key is required.
+## Requirements
 
-## Tech Stack
+- Flutter SDK 3.x (run `flutter --version`)
+- Android Studio (Android SDK) and/or Xcode for iOS
+- A phone or emulator
 
-React 19 · TypeScript · Vite · Tailwind CSS 4 · Lucide icons · vite-plugin-pwa · Capacitor (Android)
+Check your setup with `flutter doctor`.
 
 ## Getting Started
 
-Requirements: Node.js 20 or newer.
-
 ```bash
-npm install
-npm run dev        # http://localhost:3000
+flutter create smartpark
+cd smartpark
+# copy the lib/, assets/ and pubspec.yaml from this project, then:
+flutter pub get
+flutter run
 ```
 
-| Command | What it does |
+## Suggested Packages
+
+Add with `flutter pub add <name>`:
+
+| Package | Use |
 | --- | --- |
-| `npm run dev` | Start the dev server on port 3000 |
-| `npm run build` | Production build into `dist/` |
-| `npm run preview` | Preview the production build |
-| `npm run lint` | Type-check with TypeScript |
-| `npm run android:sync` | Build and sync the web app into the Android project |
-| `npm run android:open` | Open the Android project in Android Studio |
+| `video_player` | Opening intro video |
+| `provider` or `flutter_riverpod` | State management |
+| `fl_chart` | Analytics charts |
+| `google_fonts` | Typography |
+| `shared_preferences` | Save settings and theme locally |
+| `intl` | Dates, durations, currency |
 
-## Project Structure
+## Suggested Structure
 
 ```
-public/            Icons and intro.mp4 (opening video)
-src/
-  App.tsx          App shell, navigation, state
-  main.tsx         Entry point (shows the intro first)
-  components/      Views, modals, navigation, IntroSplash
-  data/            Demo data
-  hooks/           usePWAInstall
-capacitor.config.json   Android app settings
-ANDROID_APK_GUIDE.md    Step-by-step APK instructions
+lib/
+  main.dart             App entry, theme, routes
+  screens/              dashboard, spaces, auto_sense, movements,
+                        revenue, staff, settings, intro_splash
+  widgets/              bay_tile, plate_badge, stat_card, nav bars
+  models/               vehicle, bay, movement
+  services/             demo data now, real API later
+assets/
+  video/intro.mp4       Opening video
+  images/               Logo and icons
 ```
 
 ## Opening Intro
 
-`src/components/IntroSplash.tsx` plays `public/intro.mp4` full screen at launch. If the device blocks autoplay with sound, it plays muted and shows a **Tap for sound** button. To change the intro, replace `public/intro.mp4`.
+1. Put `intro.mp4` in `assets/video/`.
+2. Declare it in `pubspec.yaml`:
+   ```yaml
+   flutter:
+     assets:
+       - assets/video/intro.mp4
+       - assets/images/
+   ```
+3. Play it full screen with `VideoPlayerController.asset('assets/video/intro.mp4')` on the first screen. Navigate to the dashboard when the video ends or when the user taps **Skip**. Add a fallback so the app opens even if the video fails to load.
 
-## Build the Android APK
-
-Full steps are in [ANDROID_APK_GUIDE.md](ANDROID_APK_GUIDE.md). In short:
+## Build the APK
 
 ```bash
-npm install @capacitor/core @capacitor/android
-npm install -D @capacitor/cli
-npx cap add android
-npm run android:sync
-npm run android:open     # then Build > Build APK(s) in Android Studio
+flutter build apk --release                 # one universal APK
+flutter build apk --split-per-abi           # smaller APKs per CPU type
+flutter build appbundle --release           # .aab for the Play Store
 ```
 
-No Android Studio? Push the project to GitHub and use the included workflow in `.github/workflows/android.yml` (Actions tab → *Build Android APK* → Run workflow), then download the APK from the run's artifacts.
+Output: `build/app/outputs/flutter-apk/app-release.apk`
 
-## Deploy as a PWA
+### App name, id and icon
 
-Upload the built site (`dist/`) to any HTTPS host such as Netlify or Vercel. The app includes a web manifest and service worker, so it can be installed from the browser or packaged with [PWABuilder](https://www.pwabuilder.com).
+- Name: `android/app/src/main/AndroidManifest.xml` (`android:label`)
+- Package id: `applicationId` in `android/app/build.gradle`
+- Icon: use the `flutter_launcher_icons` package with your logo
+
+### Signing for the Play Store
+
+1. Create a keystore: `keytool -genkey -v -keystore smartpark.jks -keyalg RSA -keysize 2048 -validity 10000 -alias smartpark`
+2. Reference it in `android/key.properties` and `android/app/build.gradle`.
+3. Keep the keystore and passwords safe and **never commit them to Git**. You need the same key for every update.
+
+## Build for Other Platforms
+
+```bash
+flutter build web --release
+flutter build ios --release     # requires macOS and Xcode
+```
 
 ## Notes
 
-- Keep your Android signing keystore safe; it is required for every future update.
-- Never put secret API keys in the app code, because anything shipped in an APK or web app can be extracted.
+- The app starts with demo data. To use real data, replace the code in `services/` with API calls.
+- Never put secret API keys in the app code. Anything shipped in an APK can be extracted, so keep secrets on a server.
