@@ -1,107 +1,81 @@
-# SmartPark (Flutter) – Modern Parking & Live Monitoring
+SmartPark – Modern Parking & Live Monitoring Dashboard
 
-Flutter version of the SmartPark dashboard: live vehicle tracking, parking bay monitoring, movement logs, revenue and analytics, with an animated opening video. One codebase for Android, iOS and web.
+Project Overview
 
-> **Status:** this README describes the planned Flutter structure. The existing SmartPark project is a React web app; the Flutter code still needs to be created. Packages and folder names below are suggestions, so change them to fit your final code.
+SmartPark is a modern parking management system designed to monitor parking spaces, manage vehicle entry and exit, calculate parking fees, and display parking activity through an interactive dashboard.
 
-## Features
+The system provides a simple way to manage parking operations and monitor available, occupied, and unavailable parking spaces.
 
-- Opening intro video with music (skippable)
-- Dashboard: occupancy, free bays, entries/exits today
-- Interactive parking map grouped by zone
-- Auto Car Sense: simulated plate-recognition gates with automatic timestamps
-- Live monitoring, vehicle management, movement history, plate search
-- Reports, revenue and payments, notifications, staff, settings
-- Light and dark themes, responsive layout (phone and tablet)
+Technologies Used
+	•	React
+	•	TypeScript
+	•	Vite
+	•	Tailwind CSS
+	•	Lucide React
+	•	Local Storage
 
-## Requirements
+Main Features
+	•	Modern parking dashboard
+	•	Real-time parking space status updates within the application
+	•	Vehicle entry and exit management
+	•	Vehicle registration records
+	•	Automatic parking fee calculation
+	•	Parking zones A, B, C, and D
+	•	Vehicle movement history
+	•	Revenue monitoring
+	•	Staff and settings sections
+	•	Dark and light mode
+	•	Responsive user interface
+	•	Local storage for saving application data
 
-- Flutter SDK 3.x (run `flutter --version`)
-- Android Studio (Android SDK) and/or Xcode for iOS
-- A phone or emulator
+Object-Oriented Programming Concepts
 
-Check your setup with `flutter doctor`.
+SmartPark uses Object-Oriented Programming concepts through TypeScript classes.
 
-## Getting Started
+1. Encapsulation
 
-```bash
-flutter create smartpark
-cd smartpark
-# copy the lib/, assets/ and pubspec.yaml from this project, then:
-flutter pub get
-flutter run
-```
+The Vehicle class contains private properties such as registration number and driver name. These properties are accessed through public methods.
 
-## Suggested Packages
+2. Abstraction
 
-Add with `flutter pub add <name>`:
+The Vehicle class is an abstract class. It defines the common structure and abstract method for different vehicle types.
 
-| Package | Use |
-| --- | --- |
-| `video_player` | Opening intro video |
-| `provider` or `flutter_riverpod` | State management |
-| `fl_chart` | Analytics charts |
-| `google_fonts` | Typography |
-| `shared_preferences` | Save settings and theme locally |
-| `intl` | Dates, durations, currency |
+3. Inheritance
 
-## Suggested Structure
+Sedan, SUV, ElectricVehicle, Van, and Truck classes inherit from the Vehicle class.
 
-```
-lib/
-  main.dart             App entry, theme, routes
-  screens/              dashboard, spaces, auto_sense, movements,
-                        revenue, staff, settings, intro_splash
-  widgets/              bay_tile, plate_badge, stat_card, nav bars
-  models/               vehicle, bay, movement
-  services/             demo data now, real API later
-assets/
-  video/intro.mp4       Opening video
-  images/               Logo and icons
-```
+4. Polymorphism
 
-## Opening Intro
+Each vehicle subclass implements its own version of the getVehicleType() method.
 
-1. Put `intro.mp4` in `assets/video/`.
-2. Declare it in `pubspec.yaml`:
-   ```yaml
-   flutter:
-     assets:
-       - assets/video/intro.mp4
-       - assets/images/
-   ```
-3. Play it full screen with `VideoPlayerController.asset('assets/video/intro.mp4')` on the first screen. Navigate to the dashboard when the video ends or when the user taps **Skip**. Add a fallback so the app opens even if the video fails to load.
+5. Classes and Objects
 
-## Build the APK
+The ParkingManager class manages vehicle entry, exit, parking-space status, and available parking spaces.
 
-```bash
-flutter build apk --release                 # one universal APK
-flutter build apk --split-per-abi           # smaller APKs per CPU type
-flutter build appbundle --release           # .aab for the Play Store
-```
+The VehicleFactory class creates objects of different vehicle types.
 
-Output: `build/app/outputs/flutter-apk/app-release.apk`
+Project Structure
 
-### App name, id and icon
+Smart-Parking-System/
+│
+├── public/
+│
+├── src/
+│   ├── components/
+│   ├── data/
+│   │   └── mockData.ts
+│   ├── models/
+│   │   └── Vehicle.ts
+│   ├── services/
+│   │   └── ParkingManager.ts
+│   ├── App.tsx
+│   ├── types.ts
+│   ├── main.tsx
+│   └── index.css
+│
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── README.md
 
-- Name: `android/app/src/main/AndroidManifest.xml` (`android:label`)
-- Package id: `applicationId` in `android/app/build.gradle`
-- Icon: use the `flutter_launcher_icons` package with your logo
-
-### Signing for the Play Store
-
-1. Create a keystore: `keytool -genkey -v -keystore smartpark.jks -keyalg RSA -keysize 2048 -validity 10000 -alias smartpark`
-2. Reference it in `android/key.properties` and `android/app/build.gradle`.
-3. Keep the keystore and passwords safe and **never commit them to Git**. You need the same key for every update.
-
-## Build for Other Platforms
-
-```bash
-flutter build web --release
-flutter build ios --release     # requires macOS and Xcode
-```
-
-## Notes
-
-- The app starts with demo data. To use real data, replace the code in `services/` with API calls.
-- Never put secret API keys in the app code. Anything shipped in an APK can be extracted, so keep secrets on a server.
